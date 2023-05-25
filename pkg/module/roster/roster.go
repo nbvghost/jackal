@@ -31,7 +31,6 @@ import (
 	"github.com/ortuman/jackal/pkg/host"
 	rostermodel "github.com/ortuman/jackal/pkg/model/roster"
 	"github.com/ortuman/jackal/pkg/router"
-	"github.com/ortuman/jackal/pkg/router/stream"
 	"github.com/ortuman/jackal/pkg/storage/repository"
 	xmpputil "github.com/ortuman/jackal/pkg/util/xmpp"
 )
@@ -132,7 +131,7 @@ func (r *Roster) Stop(_ context.Context) error {
 	return nil
 }
 
-func (r *Roster) onPresenceRecv(ctx context.Context, execCtx *hook.ExecutionContext) error {
+func (r *Roster) onPresenceRecv(execCtx *hook.ExecutionContext) error {
 	var pr *stravaganza.Presence
 	switch inf := execCtx.Info.(type) {
 	case *hook.C2SStreamInfo:
@@ -145,14 +144,16 @@ func (r *Roster) onPresenceRecv(ctx context.Context, execCtx *hook.ExecutionCont
 	if pr.ToJID().IsFull() {
 		return nil
 	}
-	if err := r.processPresence(ctx, pr); err != nil {
+	if err := r.processPresence(execCtx.Context, pr); err != nil {
 		return fmt.Errorf("roster: failed to process C2S presence: %s", err)
 	}
 	return nil
 }
 
-func (r *Roster) onUserDeleted(ctx context.Context, execCtx *hook.ExecutionContext) error {
+func (r *Roster) onUserDeleted(execCtx *hook.ExecutionContext) error {
 	inf := execCtx.Info.(*hook.UserInfo)
+	ctx := execCtx.Context
+
 	return r.rep.InTransaction(ctx, func(ctx context.Context, tx repository.Transaction) error {
 		if err := tx.DeleteRosterNotifications(ctx, inf.Username); err != nil {
 			return err
@@ -202,7 +203,7 @@ func (r *Roster) sendRoster(ctx context.Context, iq *stravaganza.IQ) error {
 		if err != nil {
 			return err
 		}
-		stm, err := r.getStream(usrJID.Node(), usrJID.Resource())
+		stm, err := r.router.C2S().LocalStream(usrJID.Node(), usrJID.Resource())
 		if err != nil {
 			return err
 		}
@@ -232,7 +233,7 @@ func (r *Roster) sendRoster(ctx context.Context, iq *stravaganza.IQ) error {
 	if err != nil {
 		return err
 	}
-	stm, err := r.getStream(usrJID.Node(), usrJID.Resource())
+	stm, err := r.router.C2S().LocalStream(usrJID.Node(), usrJID.Resource())
 	if err != nil {
 		return err
 	}
@@ -551,7 +552,7 @@ func (r *Roster) processAvailability(ctx context.Context, presence *stravaganza.
 	}
 	isAvailable := presence.IsAvailable()
 	if isAvailable {
-		stm, err := r.getStream(fromJID.Node(), fromJID.Resource())
+		stm, err := r.router.C2S().LocalStream(fromJID.Node(), fromJID.Resource())
 		if err != nil {
 			return err
 		}
@@ -829,18 +830,11 @@ func (r *Roster) routePresencesFrom(ctx context.Context, username string, toJID 
 	return nil
 }
 
-func (r *Roster) getStream(username, resource string) (stream.C2S, error) {
-	stm := r.router.C2S().LocalStream(username, resource)
-	if stm == nil {
-		return nil, errStreamNotFound(username, resource)
-	}
-	return stm, nil
-}
-
 func (r *Roster) runHook(ctx context.Context, hookName string, inf *hook.RosterInfo) error {
-	_, err := r.hk.Run(ctx, hookName, &hook.ExecutionContext{
-		Info:   inf,
-		Sender: r,
+	_, err := r.hk.Run(hookName, &hook.ExecutionContext{
+		Info:    inf,
+		Sender:  r,
+		Context: ctx,
 	})
 	return err
 }
@@ -910,8 +904,4 @@ func parseVer(ver string) int {
 		return v
 	}
 	return 0
-}
-
-func errStreamNotFound(username, resource string) error {
-	return fmt.Errorf("roster: local stream not found: %s/%s", username, resource)
 }

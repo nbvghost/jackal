@@ -116,13 +116,65 @@ func TestMakeDelayStanza(t *testing.T) {
 	msg, _ := b.BuildMessage()
 
 	// when
-	stamp, _ := time.Parse(time.RFC3339, "2021-02-15T15:00:00Z")
+	stamp, _ := time.Parse(time.RFC3339, "2021-02-15T15:00:00.250Z")
 	dMsg := MakeDelayMessage(msg, stamp, "jackal.im", "Delayed IQ")
 
 	// then
 	dChild := dMsg.Child("delay")
 	require.NotNil(t, dChild)
 	require.Equal(t, "jackal.im", dChild.Attribute(stravaganza.From))
-	require.Equal(t, "2021-02-15T15:00:00Z", dChild.Attribute("stamp"))
+	require.Equal(t, "2021-02-15T15:00:00.250Z", dChild.Attribute("stamp"))
 	require.Equal(t, "Delayed IQ", dChild.Text())
+}
+
+func TestMakeStanzaIDElement(t *testing.T) {
+	// given
+	b := stravaganza.NewMessageBuilder()
+	b.WithAttribute("from", "noelia@jackal.im/yard")
+	b.WithAttribute("to", "ortuman@jackal.im/balcony")
+	b.WithChild(
+		stravaganza.NewBuilder("body").
+			WithText("I'll give thee a wind.").
+			Build(),
+	)
+	msg, _ := b.BuildMessage()
+
+	// when
+	msg = MakeStanzaIDMessage(msg, "1234", "ortuman@jackal.im")
+
+	// then
+	elem := msg.ChildNamespace("stanza-id", "urn:xmpp:sid:0")
+	require.NotNil(t, elem)
+
+	require.Equal(t, "1234", MessageStanzaID(msg))
+	require.Equal(t, "ortuman@jackal.im", elem.Attribute("by"))
+}
+
+func TestMakeForwardedElement(t *testing.T) {
+	// given
+	b := stravaganza.NewMessageBuilder()
+	b.WithAttribute("from", "noelia@jackal.im/yard")
+	b.WithAttribute("to", "ortuman@jackal.im/balcony")
+	b.WithChild(
+		stravaganza.NewBuilder("body").
+			WithText("I'll give thee a wind.").
+			Build(),
+	)
+	msg, _ := b.BuildMessage()
+
+	stamp, _ := time.Parse(time.RFC3339, "2021-02-15T15:00:00.125Z")
+	forwarded := MakeForwardedStanza(msg, &stamp)
+
+	// when
+	require.Equal(t, "urn:xmpp:forward:0", forwarded.Attribute(stravaganza.Namespace))
+
+	dChild := forwarded.Child("delay")
+	require.NotNil(t, dChild)
+	require.Equal(t, "2021-02-15T15:00:00.125Z", dChild.Attribute("stamp"))
+
+	msgEl := forwarded.Child("message")
+	require.NotNil(t, msgEl)
+	bodyEl := msgEl.Child("body")
+	require.NotNil(t, bodyEl)
+	require.Equal(t, "I'll give thee a wind.", bodyEl.Text())
 }

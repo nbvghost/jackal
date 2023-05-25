@@ -31,6 +31,7 @@ import (
 	stanzaerror "github.com/jackal-xmpp/stravaganza/errors/stanza"
 	streamerror "github.com/jackal-xmpp/stravaganza/errors/stream"
 	"github.com/jackal-xmpp/stravaganza/jid"
+	xmppparser "github.com/jackal-xmpp/stravaganza/parser"
 	"github.com/ortuman/jackal/pkg/auth"
 	"github.com/ortuman/jackal/pkg/cluster/instance"
 	"github.com/ortuman/jackal/pkg/cluster/resourcemanager"
@@ -39,7 +40,6 @@ import (
 	"github.com/ortuman/jackal/pkg/host"
 	c2smodel "github.com/ortuman/jackal/pkg/model/c2s"
 	"github.com/ortuman/jackal/pkg/module"
-	xmppparser "github.com/ortuman/jackal/pkg/parser"
 	"github.com/ortuman/jackal/pkg/router"
 	"github.com/ortuman/jackal/pkg/router/stream"
 	xmppsession "github.com/ortuman/jackal/pkg/session"
@@ -352,19 +352,22 @@ func (s *inC2S) readLoop() {
 	s.tr.SetConnectDeadlineHandler(s.connTimeout)
 	s.tr.SetKeepAliveDeadlineHandler(s.connTimeout)
 
-	authTm := time.AfterFunc(s.cfg.authenticateTimeout, s.connTimeout) // schedule authenticate timeout
-	elem, sErr := s.session.Receive()
+	// schedule authenticate timeout
+	authTm := time.AfterFunc(s.cfg.authenticateTimeout, s.connTimeout)
 	defer authTm.Stop()
 
 	for {
+		elem, sErr := s.session.Receive()
+
+		// process result and update state accordingly
+		s.handleSessionResult(elem, sErr)
+
 		switch s.getState() {
 		case inAuthenticated:
 			authTm.Stop()
 		case inDisconnected, inTerminated:
 			return
 		}
-		s.handleSessionResult(elem, sErr)
-		elem, sErr = s.session.Receive()
 	}
 }
 
@@ -401,13 +404,13 @@ func (s *inC2S) connTimeout() {
 
 func (s *inC2S) handleElement(ctx context.Context, elem stravaganza.Element) error {
 	// run received element hook
-	hInf := &hook.C2SStreamInfo{
+	hi := &hook.C2SStreamInfo{
 		ID:       s.ID().String(),
 		JID:      s.JID(),
 		Presence: s.Presence(),
 		Element:  elem,
 	}
-	halted, err := s.runHook(ctx, hook.C2SStreamElementReceived, hInf)
+	halted, err := s.runHook(ctx, hook.C2SStreamElementReceived, hi)
 	if halted {
 		return nil
 	}
@@ -418,15 +421,15 @@ func (s *inC2S) handleElement(ctx context.Context, elem stravaganza.Element) err
 	t0 := time.Now()
 	switch s.getState() {
 	case inConnecting:
-		err = s.handleConnecting(ctx, hInf.Element)
+		err = s.handleConnecting(ctx, hi.Element)
 	case inConnected:
-		err = s.handleConnected(ctx, hInf.Element)
+		err = s.handleConnected(ctx, hi.Element)
 	case inAuthenticating:
-		err = s.handleAuthenticating(ctx, hInf.Element)
+		err = s.handleAuthenticating(ctx, hi.Element)
 	case inAuthenticated:
-		err = s.handleAuthenticated(ctx, hInf.Element)
+		err = s.handleAuthenticated(ctx, hi.Element)
 	case inBinded:
-		err = s.handleBinded(ctx, hInf.Element)
+		err = s.handleBinded(ctx, hi.Element)
 	}
 	reportIncomingRequest(
 		elem.Name(),
@@ -550,15 +553,18 @@ func (s *inC2S) processStanza(ctx context.Context, stanza stravaganza.Stanza) er
 
 func (s *inC2S) processIQ(ctx context.Context, iq *stravaganza.IQ) error {
 	// run iq received hook
-	_, err := s.runHook(ctx, hook.C2SStreamIQReceived, &hook.C2SStreamInfo{
+	hi := &hook.C2SStreamInfo{
 		ID:       s.ID().String(),
 		JID:      s.JID(),
 		Presence: s.Presence(),
 		Element:  iq,
-	})
+	}
+	_, err := s.runHook(ctx, hook.C2SStreamIQReceived, hi)
 	if err != nil {
 		return err
 	}
+	iq = hi.Element.(*stravaganza.IQ)
+
 	if iq.IsSet() && iq.ChildNamespace("session", sessionNamespace) != nil {
 		if !s.flags.isSessionStarted() {
 			s.flags.setSessionStarted()
@@ -573,24 +579,22 @@ func (s *inC2S) processIQ(ctx context.Context, iq *stravaganza.IQ) error {
 		return s.mods.ProcessIQ(ctx, iq)
 	}
 	// run will route iq hook
-	hInf := &hook.C2SStreamInfo{
+	hi = &hook.C2SStreamInfo{
 		ID:       s.ID().String(),
 		JID:      s.JID(),
 		Presence: s.Presence(),
 		Element:  iq,
 	}
-	halted, err := s.runHook(ctx, hook.C2SStreamWillRouteElement, hInf)
+	halted, err := s.runHook(ctx, hook.C2SStreamWillRouteElement, hi)
 	if halted {
 		return nil
 	}
 	if err != nil {
 		return err
 	}
-	outIQ, ok := hInf.Element.(*stravaganza.IQ)
-	if !ok {
-		return nil
-	}
-	targets, err := s.router.Route(ctx, outIQ)
+	iq = hi.Element.(*stravaganza.IQ)
+
+	targets, err := s.router.Route(ctx, iq)
 	switch err {
 	case router.ErrResourceNotFound:
 		return s.sendElement(ctx, stanzaerror.E(stanzaerror.ServiceUnavailable, iq).Element())
@@ -601,8 +605,8 @@ func (s *inC2S) processIQ(ctx context.Context, iq *stravaganza.IQ) error {
 	case router.ErrRemoteServerTimeout:
 		return s.sendElement(ctx, stanzaerror.E(stanzaerror.RemoteServerTimeout, iq).Element())
 
-	case nil:
-		_, err := s.runHook(ctx, hook.C2SStreamIQRouted, &hook.C2SStreamInfo{
+	case nil, router.ErrUserNotAvailable:
+		_, err = s.runHook(ctx, hook.C2SStreamIQRouted, &hook.C2SStreamInfo{
 			ID:       s.ID().String(),
 			JID:      s.JID(),
 			Presence: s.Presence(),
@@ -616,38 +620,38 @@ func (s *inC2S) processIQ(ctx context.Context, iq *stravaganza.IQ) error {
 
 func (s *inC2S) processPresence(ctx context.Context, presence *stravaganza.Presence) error {
 	// run presence received hook
-	_, err := s.runHook(ctx, hook.C2SStreamPresenceReceived, &hook.C2SStreamInfo{
+	hi := &hook.C2SStreamInfo{
 		ID:       s.ID().String(),
 		JID:      s.JID(),
 		Presence: s.Presence(),
 		Element:  presence,
-	})
+	}
+	_, err := s.runHook(ctx, hook.C2SStreamPresenceReceived, hi)
 	if err != nil {
 		return err
 	}
+	presence = hi.Element.(*stravaganza.Presence)
 
 	if presence.ToJID().IsFullWithUser() {
 		// run will route presence hook
-		hInf := &hook.C2SStreamInfo{
+		hi = &hook.C2SStreamInfo{
 			ID:       s.ID().String(),
 			JID:      s.JID(),
 			Presence: s.Presence(),
 			Element:  presence,
 		}
-		halted, err := s.runHook(ctx, hook.C2SStreamWillRouteElement, hInf)
+		halted, err := s.runHook(ctx, hook.C2SStreamWillRouteElement, hi)
 		if halted {
 			return nil
 		}
 		if err != nil {
 			return err
 		}
-		outPr, ok := hInf.Element.(*stravaganza.Presence)
-		if !ok {
-			return nil
-		}
-		targets, err := s.router.Route(ctx, outPr)
+		presence = hi.Element.(*stravaganza.Presence)
+
+		targets, err := s.router.Route(ctx, presence)
 		switch err {
-		case nil:
+		case nil, router.ErrUserNotAvailable:
 			_, err = s.runHook(ctx, hook.C2SStreamPresenceRouted, &hook.C2SStreamInfo{
 				ID:      s.ID().String(),
 				JID:     s.JID(),
@@ -669,37 +673,36 @@ func (s *inC2S) processPresence(ctx context.Context, presence *stravaganza.Prese
 
 func (s *inC2S) processMessage(ctx context.Context, message *stravaganza.Message) error {
 	// run message received hook
-	_, err := s.runHook(ctx, hook.C2SStreamMessageReceived, &hook.C2SStreamInfo{
+	hi := &hook.C2SStreamInfo{
 		ID:       s.ID().String(),
 		JID:      s.JID(),
 		Presence: s.Presence(),
 		Element:  message,
-	})
+	}
+	_, err := s.runHook(ctx, hook.C2SStreamMessageReceived, hi)
 	if err != nil {
 		return err
 	}
-	msg := message
+	msg := hi.Element.(*stravaganza.Message)
 
 sendMsg:
-	// run will route Message hook
-	hInf := &hook.C2SStreamInfo{
+	// run will route message hook
+	hi = &hook.C2SStreamInfo{
 		ID:       s.ID().String(),
 		JID:      s.JID(),
 		Presence: s.Presence(),
 		Element:  msg,
 	}
-	halted, err := s.runHook(ctx, hook.C2SStreamWillRouteElement, hInf)
+	halted, err := s.runHook(ctx, hook.C2SStreamWillRouteElement, hi)
 	if halted {
 		return nil
 	}
 	if err != nil {
 		return err
 	}
-	outMsg, ok := hInf.Element.(*stravaganza.Message)
-	if !ok {
-		return nil
-	}
-	targets, err := s.router.Route(ctx, outMsg)
+	msg = hi.Element.(*stravaganza.Message)
+
+	targets, err := s.router.Route(ctx, msg)
 	switch err {
 	case router.ErrResourceNotFound:
 		// treat the stanza as if it were addressed to <node@domain>
@@ -718,18 +721,21 @@ sendMsg:
 	case router.ErrRemoteServerTimeout:
 		return s.sendElement(ctx, stanzaerror.E(stanzaerror.RemoteServerTimeout, message).Element())
 
-	case router.ErrUserNotAvailable:
-		return s.sendElement(ctx, stanzaerror.E(stanzaerror.ServiceUnavailable, message).Element())
-
-	case nil:
-		_, err = s.runHook(ctx, hook.C2SStreamMessageRouted, &hook.C2SStreamInfo{
+	case nil, router.ErrUserNotAvailable:
+		halted, hErr := s.runHook(ctx, hook.C2SStreamMessageRouted, &hook.C2SStreamInfo{
 			ID:       s.ID().String(),
 			JID:      s.JID(),
 			Presence: s.Presence(),
 			Targets:  targets,
 			Element:  msg,
 		})
-		return err
+		if halted {
+			return nil
+		}
+		if errors.Is(err, router.ErrUserNotAvailable) {
+			return s.sendElement(ctx, stanzaerror.E(stanzaerror.ServiceUnavailable, message).Element())
+		}
+		return hErr
 
 	default:
 		return err
@@ -765,7 +771,7 @@ func (s *inC2S) unauthenticatedFeatures() []stravaganza.Element {
 		sb.WithAttribute(stravaganza.Namespace, saslNamespace)
 		for _, authenticator := range s.authSt.authenticators {
 			if authenticator.UsesChannelBinding() && !supportsCb {
-				continue // transport doesn't support channel binding (eg. TLS 1.3)
+				continue // transport doesn't support channel binding
 			}
 			sb.WithChild(
 				stravaganza.NewBuilder("mechanism").
@@ -1105,6 +1111,7 @@ func (s *inC2S) close(ctx context.Context, disconnectErr error) error {
 	halted, err := s.runHook(ctx, hook.C2SStreamDisconnected, &hook.C2SStreamInfo{
 		ID:              s.ID().String(),
 		JID:             s.JID(),
+		Presence:        s.Presence(),
 		DisconnectError: disconnectErr,
 	})
 	if halted {
@@ -1209,9 +1216,10 @@ func (s *inC2S) getState() state {
 }
 
 func (s *inC2S) runHook(ctx context.Context, hookName string, inf *hook.C2SStreamInfo) (halt bool, err error) {
-	return s.hk.Run(ctx, hookName, &hook.ExecutionContext{
-		Info:   inf,
-		Sender: s,
+	return s.hk.Run(hookName, &hook.ExecutionContext{
+		Info:    inf,
+		Sender:  s,
+		Context: ctx,
 	})
 }
 

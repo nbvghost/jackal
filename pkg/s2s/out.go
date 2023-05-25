@@ -31,10 +31,10 @@ import (
 	"github.com/jackal-xmpp/stravaganza"
 	streamerror "github.com/jackal-xmpp/stravaganza/errors/stream"
 	"github.com/jackal-xmpp/stravaganza/jid"
+	xmppparser "github.com/jackal-xmpp/stravaganza/parser"
 	"github.com/ortuman/jackal/pkg/cluster/kv"
 	"github.com/ortuman/jackal/pkg/hook"
 	"github.com/ortuman/jackal/pkg/host"
-	xmppparser "github.com/ortuman/jackal/pkg/parser"
 	"github.com/ortuman/jackal/pkg/router/stream"
 	xmppsession "github.com/ortuman/jackal/pkg/session"
 	"github.com/ortuman/jackal/pkg/shaper"
@@ -597,9 +597,10 @@ func (s *outS2S) runHook(ctx context.Context, hookName string, inf *hook.S2SStre
 	if s.typ == dialbackType {
 		return nil
 	}
-	_, err := s.hk.Run(ctx, hookName, &hook.ExecutionContext{
-		Info:   inf,
-		Sender: s,
+	_, err := s.hk.Run(hookName, &hook.ExecutionContext{
+		Info:    inf,
+		Sender:  s,
+		Context: ctx,
 	})
 	return err
 }

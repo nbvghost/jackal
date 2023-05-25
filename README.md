@@ -37,7 +37,7 @@ jackal supports the following features:
 
 ### Getting Started
 
-To start using jackal, install Go 1.18+ and run the following commands:
+To start using jackal, install Go 1.19+ and run the following commands:
 
 ```bash
 $ git clone git@github.com:ortuman/jackal.git
@@ -66,19 +66,19 @@ To make it easy to install jackal via Helm in Kubernetes a chart has been includ
 After customizing your own [values.yaml](helm/values.yaml) file run the following command to install and configure all required components under `jackal` namespace.   
 
 ```sh
-sh ./helm/scripts/install <your_custom_values>.yaml
+sh ./helm/scripts/install.sh <your_custom_values>.yaml
 ```
 
 In turn, an active chart can be updated by running the upgrade script as follows:
 
 ```sh
-sh ./helm/scripts/upgrade <your_custom_values>.yaml
+sh ./helm/scripts/upgrade.sh <your_custom_values>.yaml
 ```
 
 On the other hand, you can also remove the jackal chart from your Kubernetes cluster by running the uninstall script: 
 
 ```sh
-sh ./helm/scripts/uninstall
+sh ./helm/scripts/uninstall.sh
 ```
 
 ### PostgreSQL database creation
@@ -178,6 +178,8 @@ Start a new jackal Docker container with custom configuration.
 ```sh
 docker run --name=jackal \
    --mount type=bind,src=/path-on-host-machine/my-custom-config.yaml,dst=/jackal/config.yaml \
+   -p "5222:5222" \
+   -p "15280:15280" \  # used by jackalctl
    -d ortuman/jackal:latest
 ```
 
@@ -201,9 +203,11 @@ Once up and running, don't forget to [register one or more users](#creating-jack
 - [XEP-0030: Service Discovery](https://xmpp.org/extensions/xep-0030.html) *2.5rc3*
 - [XEP-0049: Private XML Storage](https://xmpp.org/extensions/xep-0049.html) *1.2*
 - [XEP-0054: vcard-temp](https://xmpp.org/extensions/xep-0054.html) *1.2*
+- [XEP-0059: Result Set Management](https://xmpp.org/extensions/xep-0059.html) *1.0*
 - [XEP-0092: Software Version](https://xmpp.org/extensions/xep-0092.html) *1.1*
 - [XEP-0114: Jabber Component Protocol](https://xmpp.org/extensions/xep-0114.html) *1.6*  
-- [XEP-0115: Entity Capabilities](https://xmpp.org/extensions/xep-0115.html) *1.5.2*  
+- [XEP-0115: Entity Capabilities](https://xmpp.org/extensions/xep-0115.html) *1.5.2*
+- [XEP-0122: Data Forms Validation](https://xmpp.org/extensions/xep-0122.html) *1.0.2*
 - [XEP-0138: Stream Compression](https://xmpp.org/extensions/xep-0138.html) *2.0*
 - [XEP-0160: Best Practices for Handling Offline Messages](https://xmpp.org/extensions/xep-0160.html) *1.0.1*
 - [XEP-0190: Best Practice for Closing Idle Streams](https://xmpp.org/extensions/xep-0190.html) *1.1*
@@ -214,6 +218,8 @@ Once up and running, don't forget to [register one or more users](#creating-jack
 - [XEP-0220: Server Dialback](https://xmpp.org/extensions/xep-0220.html) *1.1.1*
 - [XEP-0237: Roster Versioning](https://xmpp.org/extensions/xep-0237.html) *1.3*
 - [XEP-0280: Message Carbons](https://xmpp.org/extensions/xep-0280.html) *0.13.3*
+- [XEP-0297: Stanza Forwarding](https://xmpp.org/extensions/xep-0297.html) *1.0*
+- [XEP-0313: Message Archive Management](https://xmpp.org/extensions/xep-0313.html) *1.0.1*
 - [XEP-0368: SRV records for XMPP over TLS](https://xmpp.org/extensions/xep-0368.html) *1.1.0*
 
 ## Join and Contribute

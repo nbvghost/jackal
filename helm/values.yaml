@@ -10,7 +10,7 @@ jackal:
 
   image:
     repository: ortuman/jackal
-    tag: 0.61.0
+    tag: 0.64.0
     pullPolicy: IfNotPresent
   resources:
     requests:
@@ -125,6 +125,7 @@ jackal:
         - ping        # XEP-0199: XMPP Ping
         - time        # XEP-0202: Entity Time
         - carbons     # XEP-0280: Message Carbons
+        - mam         # XEP-0313: Message Archive Management
 
       version:
         show_os: true
@@ -137,6 +138,9 @@ jackal:
         interval: 3m
         send_pings: true
         timeout_action: kill
+
+      mam:
+        queue_size: 1500
 
     components:
     #  listeners:
@@ -152,7 +156,7 @@ etcd:
       create: false
   persistence:
     enabled: false
-  replicaCount: 2
+  replicaCount: 3
   resources:
     requests:
       cpu: 120m

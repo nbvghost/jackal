@@ -31,11 +31,11 @@ import (
 	"github.com/jackal-xmpp/stravaganza"
 	streamerror "github.com/jackal-xmpp/stravaganza/errors/stream"
 	"github.com/jackal-xmpp/stravaganza/jid"
+	xmppparser "github.com/jackal-xmpp/stravaganza/parser"
 	"github.com/ortuman/jackal/pkg/component"
 	"github.com/ortuman/jackal/pkg/component/extcomponentmanager"
 	"github.com/ortuman/jackal/pkg/hook"
 	"github.com/ortuman/jackal/pkg/host"
-	xmppparser "github.com/ortuman/jackal/pkg/parser"
 	"github.com/ortuman/jackal/pkg/router"
 	xmppsession "github.com/ortuman/jackal/pkg/session"
 	"github.com/ortuman/jackal/pkg/shaper"
@@ -453,9 +453,10 @@ func (s *inComponent) getState() inComponentState {
 }
 
 func (s *inComponent) runHook(ctx context.Context, hookName string, inf *hook.ExternalComponentInfo) (halt bool, err error) {
-	return s.hk.Run(ctx, hookName, &hook.ExecutionContext{
-		Info:   inf,
-		Sender: s,
+	return s.hk.Run(hookName, &hook.ExecutionContext{
+		Info:    inf,
+		Sender:  s,
+		Context: ctx,
 	})
 }
 

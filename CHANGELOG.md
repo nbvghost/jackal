@@ -2,6 +2,25 @@
 
 ## jackal - main / unreleased
 
+## 0.64.0 (2023/01/06)
+
+* [ENHANCEMENT] stravaganza: improved xml parsing performance. [#283](https://github.com/ortuman/jackal/pull/283)
+
+## 0.62.3 (2022/09/29)
+
+* [BUGFIX] s2s: overwrite stanza value on received hooks [#261](https://github.com/ortuman/jackal/pull/261)
+
+## 0.62.2 (2022/09/23)
+
+* [BUGFIX] storage/archive: fix timestamp range filtering [#254](https://github.com/ortuman/jackal/pull/254), [#257](https://github.com/ortuman/jackal/pull/257)
+
+## 0.62.0 (2022/09/13)
+
+* [FEATURE] module: added support for xep-0313 [#241](https://github.com/ortuman/jackal/pull/241), [#253](https://github.com/ortuman/jackal/pull/253)
+* [ENHANCEMENT] auth: re-enable TLS 1.3 channel binding during auth using [RFC 9266](https://www.rfc-editor.org/rfc/rfc9266) [#247](https://github.com/ortuman/jackal/pull/247)
+* [ENHANCEMENT] hook: include propagated context into execution parameter. [#249](https://github.com/ortuman/jackal/pull/249)
+* [ENHANCEMENT] transport: limit writer buffer size [#251](https://github.com/ortuman/jackal/pull/251)
+
 ## 0.61.0 (2022/06/06)
 
 * [ENHANCEMENT] Helm: added support for cloud LB. [237](https://github.com/ortuman/jackal/pull/237) 

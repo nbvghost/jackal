@@ -82,11 +82,12 @@ func TestPing_SendPing(t *testing.T) {
 
 	// when
 	_ = p.Start(context.Background())
-	_, _ = hk.Run(context.Background(), hook.C2SStreamBinded, &hook.ExecutionContext{
+	_, _ = hk.Run(hook.C2SStreamBinded, &hook.ExecutionContext{
 		Info: &hook.C2SStreamInfo{
 			ID:  "c2s1",
 			JID: jd,
 		},
+		Context: context.Background(),
 	})
 	time.Sleep(time.Second) // wait until ping is triggered
 
@@ -110,8 +111,8 @@ func TestPing_Timeout(t *testing.T) {
 		return nil
 	}
 	c2sRouterMock := &c2sRouterMock{}
-	c2sRouterMock.LocalStreamFunc = func(username string, resource string) stream.C2S {
-		return c2sStream
+	c2sRouterMock.LocalStreamFunc = func(username string, resource string) (stream.C2S, error) {
+		return c2sStream, nil
 	}
 	routerMock.C2SFunc = func() router.C2SRouter {
 		return c2sRouterMock
@@ -128,11 +129,12 @@ func TestPing_Timeout(t *testing.T) {
 
 	// when
 	_ = p.Start(context.Background())
-	_, _ = hk.Run(context.Background(), hook.C2SStreamBinded, &hook.ExecutionContext{
+	_, _ = hk.Run(hook.C2SStreamBinded, &hook.ExecutionContext{
 		Info: &hook.C2SStreamInfo{
 			ID:  "c2s1",
 			JID: jd,
 		},
+		Context: context.Background(),
 	})
 	time.Sleep(time.Second) // wait until ping is triggered
 

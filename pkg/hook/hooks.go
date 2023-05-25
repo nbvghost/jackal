@@ -28,25 +28,32 @@ type Priority int32
 
 const (
 	// LowestPriority defines lowest hook execution priority.
-	LowestPriority = Priority(math.MinInt32 + 100)
+	LowestPriority = Priority(math.MinInt32)
+
+	// LowPriority defines low hook execution priority.
+	LowPriority = Priority(math.MinInt32 + 1000)
 
 	// DefaultPriority defines default hook execution priority.
 	DefaultPriority = Priority(0)
 
+	// HighPriority defines high hook execution priority.
+	HighPriority = Priority(math.MaxInt32 - 1000)
+
 	// HighestPriority defines highest hook execution priority.
-	HighestPriority = Priority(math.MaxInt32 - 100)
+	HighestPriority = Priority(math.MaxInt32)
 )
 
 // Handler defines a generic hook handler function.
-type Handler func(ctx context.Context, execCtx *ExecutionContext) error
+type Handler func(execCtx *ExecutionContext) error
 
 // ErrStopped error is returned by a handler to halt hook execution.
 var ErrStopped = errors.New("hook: execution stopped")
 
 // ExecutionContext defines a hook execution info context.
 type ExecutionContext struct {
-	Info   interface{}
-	Sender interface{}
+	Info    interface{}
+	Sender  interface{}
+	Context context.Context
 }
 
 type handler struct {
@@ -101,13 +108,13 @@ func (h *Hooks) RemoveHook(hook string, hnd Handler) {
 
 // Run invokes all hook handlers in order.
 // If halted return value is true no more handlers are invoked.
-func (h *Hooks) Run(ctx context.Context, hook string, execCtx *ExecutionContext) (halted bool, err error) {
+func (h *Hooks) Run(hook string, execCtx *ExecutionContext) (halted bool, err error) {
 	h.mu.RLock()
 	defer h.mu.RUnlock()
 
 	handlers := h.handlers[hook]
 	for _, handler := range handlers {
-		err := handler.h(ctx, execCtx)
+		err := handler.h(execCtx)
 		switch {
 		case err == nil:
 			break
